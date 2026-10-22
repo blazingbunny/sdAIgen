@@ -21,10 +21,10 @@ from pathlib import Path
 from os import chdir as CD
 
 # === SDAIGEN ===
-from sdai.constants import HOME_PATH, SETTINGS_PATH, VENV_PATH, SCRIPTS_PATH, COL
+from sdai.constants import HOME_PATH, SETTINGS_PATH, VENV_PATH, SCRIPTS_PATH, GD_MOUNT, COL
 from sdai.utils.json import read, save, update, key_exists, load_settings
 from sdai.services.tunnel_hub import Tunnel
-from sdai.webui_meta import WEBUIS, meta
+from sdai.webui_meta import WEBUIS, meta, gdrive_path
 from sdai.translations import tr
 
 
@@ -55,6 +55,8 @@ osENV.update({
 
 settings = load_settings(SETTINGS_PATH)
 locals().update(settings)
+
+GDRIVE_CFG = read(SETTINGS_PATH, 'GDRIVE', {})
 
 
 # ~~ TUNNELS ~~
@@ -217,6 +219,31 @@ def _trashing():
         subprocess.run(shlex.split(cmd), stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
 
+GDRIVE_MOUNT = GD_MOUNT / 'MyDrive'
+
+
+def _gdrive_launch_args() -> str:
+    """Build ComfyUI dir flags that persist outputs, inputs and user data to GDrive"""
+    if ENV_NAME != 'Colab' or not GDRIVE_CFG.get('mount') or not GDRIVE_MOUNT.exists():
+        return ''
+
+    dirs = []
+    if GDRIVE_CFG.get('gdrive_outputs'):
+        dirs += [
+            ('--output-directory', gdrive_path(UI_NAME, output_dir)),
+            ('--input-directory',  gdrive_path(UI_NAME, WEBUI_PATH / 'input')),
+        ]
+    if GDRIVE_CFG.get('gdrive_configs'):
+        dirs.append(('--user-directory', gdrive_path(UI_NAME, WEBUI_PATH / 'user')))
+
+    args = []
+    for flag, path in dirs:
+        path.mkdir(parents=True, exist_ok=True)
+        args += [flag, f'"{path}"']
+
+    return f" {' '.join(args)}" if args else ''
+
+
 def get_launch_command() -> str:
     """Construct the launch command from settings"""
     common_args = ' --enable-insecure-extension-access --disable-console-progressbars --skip-torch-cuda-test --theme dark'
@@ -229,7 +256,7 @@ def get_launch_command() -> str:
     launcher = meta(UI_NAME)['launcher']
 
     if UI_NAME == 'ComfyUI':
-        return f"python3 {launcher} {commandline_arguments}"
+        return f"python3 {launcher} {commandline_arguments}{_gdrive_launch_args()}"
     return f"python3 {launcher} {commandline_arguments}{common_args}"
 
 

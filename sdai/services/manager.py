@@ -21,6 +21,8 @@ from sdai.utils.json import read
 logger = Logger(enabled=False)
 
 
+# --file-allocation=none keeps aria2c from preallocating GB-sized files on the
+# GDrive FUSE mount, where preallocation stalls or fails.
 ARIA2_FLAGS = (
     '--allow-overwrite=true'
     ' --auto-file-renaming=false'
@@ -29,6 +31,7 @@ ARIA2_FLAGS = (
     ' --max-tries=10'
     ' --retry-wait=5'
     ' --check-certificate=false'
+    ' --file-allocation=none'
     ' -c -x16 -s16 -k1M -j5'
 )
 

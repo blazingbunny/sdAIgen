@@ -10,9 +10,10 @@ from IPython.display import HTML, display
 from pathlib import Path
 
 # === SDAIGEN ===
-from sdai.constants import SETTINGS_PATH, CSS_DIR_PATH, GD_BASE, GD_FILES, GD_OUTPUTS
+from sdai.constants import SETTINGS_PATH, CSS_DIR_PATH, GD_BASE
 from sdai.utils.json import read, load_settings
 from sdai.factory import WidgetFactory
+from sdai.webui_meta import gdrive_path as gdrive_mirror
 from sdai.translations import tr
 
 
@@ -40,34 +41,28 @@ show_gdrive_toggle = ENV_NAME == 'Colab' and mount_gdrive and os.path.exists(GD_
 
 # ~~ DIRECTORY MAPPING ~~
 
-def gdrive_path(name: str, gd_folder: str, ui: str) -> str:
-    """Return the GDrive path for a directory"""
-    return str(GD_OUTPUTS / ui) if name == 'Output Images' else str(GD_FILES / gd_folder)
-
-
 def build_directories(ui: str) -> dict[str, dict[bool, str | Path]]:
     """Build directory mapping: name -> {False: local, True: gdrive}"""
-    # gdrive_map: display_name | (gd_folder, local_dir)
-    gdrive_map = {
-        # Display Name | GD folder | Local dir
-        'Models':            ('Checkpoints', model_dir),
-        'VAE':               ('VAE',         vae_dir),
-        'LoRa':              ('LoRa',        lora_dir),
-        'ControlNet Models': ('ControlNet',  control_dir),
-        'CLIP Models':       ('Clip',        clip_dir),
-        'UNET Models':       ('Unet',        unet_dir),
-        'Vision Models':     ('Vision',      vision_dir),
-        'Encoder Models':    ('Encoder',     encoder_dir),
-        'Diffusion Models':  ('Diffusion',   diffusion_dir),
-        'Output Images':     ('Output',      output_dir),
+    # Display name | Local dir
+    directory_map = {
+        'Models':            model_dir,
+        'VAE':               vae_dir,
+        'LoRa':              lora_dir,
+        'ControlNet Models': control_dir,
+        'CLIP Models':       clip_dir,
+        'UNET Models':       unet_dir,
+        'Vision Models':     vision_dir,
+        'Encoder Models':    encoder_dir,
+        'Diffusion Models':  diffusion_dir,
+        'Output Images':     output_dir,
     }
 
     return {
         name: {
             False: local,
-            True:  gdrive_path(name, gd, ui) if show_gdrive_toggle else local,
+            True:  str(gdrive_mirror(ui, local)) if show_gdrive_toggle else local,
         }
-        for name, (gd, local) in gdrive_map.items()
+        for name, local in directory_map.items()
     }
 
 

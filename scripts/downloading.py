@@ -21,8 +21,8 @@ from typing import Any
 from os import chdir as CD
 
 # === SDAIGEN ===
-from sdai.constants import HOME_PATH, SETTINGS_PATH, VENV_PATH, SCRIPTS_PATH, GD_BASE, GD_FILES, GD_OUTPUTS, GD_CONFIGS, HF_REPO_URL, COL
-from sdai.webui_meta import DEFAULT_VENV, WEBUIS, meta, build_urls
+from sdai.constants import HOME_PATH, SETTINGS_PATH, VENV_PATH, SCRIPTS_PATH, GD_MOUNT, GD_BASE, HF_REPO_URL, COL
+from sdai.webui_meta import DEFAULT_VENV, WEBUIS, meta, build_urls, gdrive_path
 from sdai.utils.json import read, save, key_exists, load_settings
 from sdai.services.manager import _normalize_url, download, clone
 from sdai.models import find_model_by_partial_name, get_category
@@ -306,66 +306,157 @@ def cleanup_ipynb_checkpoints(base_path: Path):
             chk = Path(root) / '.ipynb_checkpoints'
             shutil.rmtree(chk, ignore_errors=True)
 
+
+# Old per-file layout -> whole user/ dir layout (ComfyUI)
+LEGACY_COMFY_CONFIGS = {
+    'comfy.settings.json':      'user/default/comfy.settings.json',
+    'comfy-manager-config.ini': 'user/__manager/config.ini',
+    'workflows':                'user/default/workflows',
+}
+
+
+def migrate_comfy_user_dir(config_base: Path):
+    """Move legacy per-file ComfyUI configs into user/ and materialize local symlinks
+
+    Needed once when switching from individual config symlinks to syncing the
+    whole `user/` directory, so the merge into GDrive never moves a symlink
+    into the Drive mount (which does not support them).
+    """
+    # Materialize first: copy target content back so the user/ merge below
+    # cannot drop files that only existed on Drive.
+    user_dir = Path(WEBUI_PATH) / 'user'
+    if user_dir.is_dir() and not user_dir.is_symlink():
+        for path in sorted(user_dir.rglob('*')):
+            if not path.is_symlink():
+                continue
+            target = path.resolve()
+            path.unlink()
+            if target.is_dir():
+                shutil.copytree(target, path, dirs_exist_ok=True)
+            elif target.is_file():
+                shutil.copy2(target, path)
+
+    for old, new in LEGACY_COMFY_CONFIGS.items():
+        src, dst = config_base / old, config_base / new
+        if not src.exists() or src.is_symlink() or dst.exists():
+            continue
+        dst.parent.mkdir(parents=True, exist_ok=True)
+        shutil.move(str(src), str(dst))
+
+
+# Old shared layout (files/, outputs/, configs/) -> per-UI mirrored layout
+LEGACY_FILES = {
+    'Checkpoints': model_dir,
+    'VAE':         vae_dir,
+    'LoRa':        lora_dir,
+    'Embeddings':  embed_dir,
+    'ControlNet':  control_dir,
+    'Upscale':     upscale_dir,
+    'Adetailer':   adetailer_dir,
+    'Clip':        clip_dir,
+    'Unet':        unet_dir,
+    'Vision':      vision_dir,
+    'Encoder':     encoder_dir,
+    'Diffusion':   diffusion_dir,
+    'Extensions':  extension_dir,
+    'Custom-Nodes': extension_dir,
+}
+
+
+def move_into(src: Path, dst: Path):
+    """Move src's entries into dst, never overwriting an existing destination"""
+    if not src.is_dir() or src.is_symlink():
+        return
+
+    dst.mkdir(parents=True, exist_ok=True)
+    for item in src.iterdir():
+        target = dst / item.name
+        if not target.exists():
+            shutil.move(str(item), str(target))
+
+    try:
+        src.rmdir()
+    except OSError:
+        pass    # leftovers from a conflicting name stay where they are
+
+
+def migrate_gdrive_layout(ui: str):
+    """Move the legacy shared Drive folders into the UI's own mirrored folder"""
+    for folder, local in LEGACY_FILES.items():
+        move_into(GD_BASE / 'files' / folder, gdrive_path(ui, local))
+
+    move_into(GD_BASE / 'outputs' / ui, gdrive_path(ui, output_dir))
+
+    config_base = GD_BASE / 'configs' / ui
+    if config_base.is_dir():
+        for item in list(config_base.iterdir()):
+            target = gdrive_path(ui, WEBUI_PATH / item.name)
+            if target.exists():
+                continue
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.move(str(item), str(target))
+
+        try:
+            config_base.rmdir()
+        except OSError:
+            pass
+
+    for legacy in (GD_BASE / 'files', GD_BASE / 'outputs', GD_BASE / 'configs'):
+        try:
+            legacy.rmdir()
+        except OSError:
+            pass
+
 # --- Main Logic ---
 
 def build_symlink_config(ui: str) -> dict:
-    """Build symlink configuration based on UI type"""
+    """Build symlink configuration, mirroring each UI's tree inside its GDrive folder"""
     is_comfy = meta(ui)['layout'] == 'comfy'
 
-    # base_files: (local_dir, gdrive_folder_name)
+    # Model/component dirs (aliases like A1111 clip/unet/encoder share one path)
     base_files = [
-        (model_dir,     'Checkpoints'),
-        (vae_dir,       'VAE'),
-        (lora_dir,      'LoRa'),
-        (embed_dir,     'Embeddings'),
-        (control_dir,   'ControlNet'),
-        (upscale_dir,   'Upscale'),
-        # Others
-        (adetailer_dir, 'Adetailer'),
-        (clip_dir,      'Clip'),
-        (unet_dir,      'Unet'),
-        (vision_dir,    'Vision'),
-        (encoder_dir,   'Encoder'),
-        (diffusion_dir, 'Diffusion'),
+        model_dir, vae_dir, lora_dir, embed_dir, control_dir, upscale_dir,
+        adetailer_dir, clip_dir, unet_dir, vision_dir, encoder_dir, diffusion_dir,
     ]
+
+    # Direct link: the local dir itself becomes a symlink to GDrive, so every
+    # write (UI downloads, Model Manager, this notebook) lands on Drive.
     _files = [
-        {'local': local, 'gdrive': str(GD_FILES / gdir)}
-        for local, gdir in base_files
+        {
+            'local':       local,
+            'gdrive':      str(gdrive_path(ui, local)),
+            'direct_link': True,
+        }
+        for local in dict.fromkeys(base_files)
     ]
-    ext_folder = 'Custom-Nodes' if is_comfy else 'Extensions'
+
+    # Extensions stay local (cloned per session); GDrive is a copy-back source
     _files.append({
         'local':  extension_dir,
-        'gdrive': str(GD_FILES / ext_folder)
+        'gdrive': str(gdrive_path(ui, extension_dir)),
     })
 
     _outputs = [{
         'local': output_dir,
-        'gdrive': str(GD_OUTPUTS / ui),
+        'gdrive': str(gdrive_path(ui, output_dir)),
         'direct_link': True
     }]
 
     # Config structure
-    config_base = GD_CONFIGS / ui
     if is_comfy:
-        # ComfyUI specific config structure
-        user_default = WEBUI_PATH / 'user' / 'default'
-        user_manager = WEBUI_PATH / 'user' / '__manager'
-        _configs = [
-            {'local': str(user_default / 'comfy.settings.json'), 'gdrive': str(config_base / 'comfy.settings.json'),
-                'type': 'file', 'name': 'ComfyUI Settings'},
-            {'local': str(user_manager / 'config.ini'), 'gdrive': str(config_base / 'comfy-manager-config.ini'),
-                'type': 'file', 'name': 'Comfy Manager Config'},
-            {'local': str(user_default / 'workflows'), 'gdrive': str(config_base / 'workflows'),
-                'type': 'dir', 'name': 'Workflows'}
-        ]
+        # ComfyUI user data: settings, Manager config, workflows, node prefs
+        local_configs = [WEBUI_PATH / 'user']
+        config_type   = 'dir'
     else:
         # A1111/Forge config structure
-        _configs = [
-            {'local': str(WEBUI_PATH / 'config.json'), 'gdrive': str(config_base / 'config.json'),
-                'type': 'file', 'name': 'WebUI Config'},
-            {'local': str(WEBUI_PATH / 'ui-config.json'), 'gdrive': str(config_base / 'ui-config.json'),
-                'type': 'file', 'name': 'UI Config'}
-        ]
+        local_configs = [WEBUI_PATH / 'config.json', WEBUI_PATH / 'ui-config.json']
+        config_type   = 'file'
+
+    _configs = [
+        {'local': str(local), 'gdrive': str(gdrive_path(ui, local)),
+            'type': config_type, 'name': local.name}
+        for local in local_configs
+    ]
 
     return {'files': _files, 'outputs': _outputs, 'configs': _configs}
 
@@ -378,6 +469,13 @@ def create_symlink(src: str | Path, dst: str | Path, symlink_name='GDrive', dire
         dst.mkdir(parents=True, exist_ok=True)
 
         if direct_link:
+            # Migrate a leftover subfolder from the previous layout
+            legacy = src / 'GDrive'
+            if legacy.is_symlink():
+                legacy.unlink()     # contents already live on Drive
+            elif legacy.is_dir():
+                merge_dirs(legacy, dst, label=tr('gd_merge_migrated'), log=log)
+
             # Direct link mode: replace entire directory with symlink
             if src.exists() and src.is_dir() and not src.is_symlink():
                 merge_dirs(src, dst, label=tr('gd_merge_migrated'), log=log)
@@ -477,7 +575,8 @@ def _clear_category_symlinks(config_list: list, category: str, restore=False, lo
     removed = 0
     for cfg in config_list:
         if category == 'files':
-            p = Path(cfg['local']) / 'GDrive'
+            # Direct-linked dirs are symlinks themselves; others use a GDrive subfolder
+            p = Path(cfg['local']) if cfg.get('direct_link') else Path(cfg['local']) / 'GDrive'
             if p.is_symlink():
                 p.unlink()
                 removed += 1
@@ -517,7 +616,7 @@ def handle_gdrive(mount_flag: bool, ui='A1111', log=False, sync_files=False, syn
     from google.colab import drive
 
     cleanup_ipynb_checkpoints(GD_BASE)  # Remove Jupyter checkpoints
-    drive_mounted = os.path.exists('/content/drive/MyDrive')
+    drive_mounted = (GD_MOUNT / 'MyDrive').exists()
 
     # Unmount logic
     if not mount_flag:
@@ -530,7 +629,7 @@ def handle_gdrive(mount_flag: bool, ui='A1111', log=False, sync_files=False, syn
 
                 with capture.capture_output():
                     drive.flush_and_unmount()
-                    os.system('rm -rf /content/drive')
+                    os.system(f'rm -rf {GD_MOUNT}')
 
                 print(f"\r✅ {tr('gd_unmounted')}")
                 if removed:
@@ -544,7 +643,7 @@ def handle_gdrive(mount_flag: bool, ui='A1111', log=False, sync_files=False, syn
         try:
             print(f"⏳ {tr('gd_mounting')}", end='')
             with capture.capture_output():
-                drive.mount('/content/drive')
+                drive.mount(str(GD_MOUNT))
             print(f"\r💿 {tr('gd_mounted')}")
         except Exception as exc:
             print(f"\r{COL.R}❌ {tr('gd_mount_error')}{COL.X} {exc}")
@@ -571,11 +670,14 @@ def handle_gdrive(mount_flag: bool, ui='A1111', log=False, sync_files=False, syn
 
     try:
         # Create base directories
-        for base, enabled in ((GD_BASE, True), (GD_FILES, sync_files), (GD_OUTPUTS, sync_outputs), (GD_CONFIGS, sync_configs)):
-            if enabled:
-                os.makedirs(base, exist_ok=True)
+        os.makedirs(GD_BASE, exist_ok=True)
 
         config = build_symlink_config(ui)
+
+        # Upgrade paths: per-file ComfyUI configs -> user/ dir, then shared -> per-UI layout
+        if sync_configs and meta(ui)['layout'] == 'comfy':
+            migrate_comfy_user_dir(GD_BASE / 'configs' / ui)
+        migrate_gdrive_layout(ui)
 
         # Step 1: restore + remove DESELECTED categories
         for key, enabled, restore, _, _ in categories:
@@ -967,7 +1069,12 @@ if UI_NAME == 'ComfyUI':
 diffusion_link = Path(diffusion_dir)
 
 if UI_NAME == 'ComfyUI':
-    if not diffusion_link.is_symlink():
+    # Point diffusion_models at the checkpoints dir (may itself be a GDrive link)
+    already_linked = (
+        diffusion_link.is_symlink()
+        and diffusion_link.resolve() == Path(model_dir).resolve()
+    )
+    if not already_linked:
         _remove_path(diffusion_link)    # remove real dir/file if present
         diffusion_link.symlink_to(Path(model_dir), target_is_directory=True)
 elif diffusion_link.is_symlink():

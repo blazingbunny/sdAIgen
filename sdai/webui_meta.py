@@ -3,7 +3,7 @@
 from pathlib import Path
 
 # === SDAIGEN ===
-from sdai.constants import HOME_PATH, VENV_PATH, HF_REPO_URL
+from sdai.constants import HOME_PATH, VENV_PATH, HF_REPO_URL, GD_BASE
 
 
 # ~~ SHARED CONFIGS ~~
@@ -210,6 +210,17 @@ def build_extensions_url(ui: str, github: str, branch: str) -> str:
 
 
 # ~~ PATH BUILDERS ~~
+
+def gdrive_path(ui: str, local: str | Path) -> Path:
+    """Mirror a local WebUI path inside that UI's own GDrive folder"""
+    ui_key = resolve(ui)
+    local  = Path(local)
+
+    try:
+        return GD_BASE / ui_key / local.relative_to(HOME_PATH / ui_key)
+    except ValueError:
+        return GD_BASE / ui_key / local.name
+
 
 def build_paths(ui: str) -> dict[str, Path]:
     """Build all WebUI directories for the given UI from meta"""
