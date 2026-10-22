@@ -209,6 +209,11 @@ def build_extensions_url(ui: str, github: str, branch: str) -> str:
     return f"https://raw.githubusercontent.com/{github}/{branch}/configs/{resolve(ui)}/extensions.txt"
 
 
+def build_models_url(ui: str, github: str, branch: str) -> str:
+    """URL of the UI's model list file"""
+    return f"https://raw.githubusercontent.com/{github}/{branch}/configs/{resolve(ui)}/models.txt"
+
+
 # ~~ PATH BUILDERS ~~
 
 def gdrive_path(ui: str, local: str | Path) -> Path:

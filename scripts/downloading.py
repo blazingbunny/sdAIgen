@@ -22,7 +22,7 @@ from os import chdir as CD
 
 # === SDAIGEN ===
 from sdai.constants import HOME_PATH, SETTINGS_PATH, VENV_PATH, SCRIPTS_PATH, GD_MOUNT, GD_BASE, HF_REPO_URL, COL
-from sdai.webui_meta import DEFAULT_VENV, WEBUIS, meta, build_urls, gdrive_path
+from sdai.webui_meta import DEFAULT_VENV, WEBUIS, meta, build_urls, build_models_url, gdrive_path
 from sdai.utils.json import read, save, key_exists, load_settings
 from sdai.services.manager import _normalize_url, download, clone
 from sdai.models import find_model_by_partial_name, get_category
@@ -35,6 +35,8 @@ ipySys = get_ipython().system
 ipyRun = get_ipython().run_line_magic
 
 ENV_NAME   = read(SETTINGS_PATH, 'ENVIRONMENT.env_name')
+GITHUB     = read(SETTINGS_PATH, 'ENVIRONMENT.github')
+BRANCH     = read(SETTINGS_PATH, 'ENVIRONMENT.branch')
 UI_NAME    = ensure_webui_settings()
 WEBUI_PATH = Path(read(SETTINGS_PATH, 'WEBUI.webui_path') or HOME_PATH / UI_NAME)
 EXTS_DIR   = Path(read(SETTINGS_PATH, 'WEBUI.extension_dir'))
@@ -961,10 +963,17 @@ def _process_lines(lines: list[str]) -> str:
         clean_line = line.strip().lower()
 
         # Update the current tag when detected
+        is_tag_line = False
         for prefix, (_, short_tag) in PREFIX_MAP.items():
             if (f"# {prefix}".lower() in clean_line) or (short_tag and short_tag.lower() in clean_line):
                 current_tag = prefix
+                is_tag_line = True
                 break
+
+        # A '#' line is a comment unless it is a category header - otherwise
+        # commented-out URLs would still be downloaded
+        if line.strip().startswith('#') and not is_tag_line:
+            continue
 
         if not current_tag:
             continue
@@ -1019,6 +1028,10 @@ def process_file_downloads(file_urls: list[str], additional_lines: str = None) -
 # File URLs processing
 urls_sources = (model_urls, vae_urls, lora_urls, embedding_urls, extensions_urls, adetailer_urls)
 file_urls = [f"{f}.txt" if not f.endswith('.txt') else f for f in re.split(r'[\s,]+', custom_file_urls) if f] if custom_file_urls else []
+
+# Repo-hosted model list (configs/<UI>/models.txt), same format as extensions.txt
+if GITHUB and BRANCH:
+    file_urls.append(build_models_url(UI_NAME, GITHUB, BRANCH))
 
 # p -> prefix ; u -> url | Remember: don't touch the prefix!
 prefixed_urls = [f"{p}:{u}" for p, u in zip(PREFIX_MAP, urls_sources) if u for u in u.replace(',', '').split()]

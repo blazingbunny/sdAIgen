@@ -1,0 +1,36 @@
+# ComfyUI - model list
+#
+# Fetched automatically on every run from
+#   raw.githubusercontent.com/<your-fork>/<branch>/configs/ComfyUI/models.txt
+# You can also use it locally: paste its path or URL into the
+# "Files" field of the Custom Download box in the widgets panel.
+#
+# Format
+#   A line starting with "# <category>" switches the category for the URLs
+#   below it. Each following line holds one download URL; a trailing
+#   [file name] overrides the downloaded file name. Anything after # is a
+#   comment, and a URL that is commented out is ignored.
+#
+# Categories (folder they land in)
+#   model      models/checkpoints
+#   vae        models/vae
+#   lora       models/loras
+#   embed      models/embeddings
+#   control    models/controlnet
+#   upscale    models/upscale_models
+#   clip       models/clip
+#   unet       models/unet
+#   vision     models/clip_vision
+#   encoder    models/text_encoders
+#   diffusion  models/diffusion_models
+#   adetailer  models/ultralytics
+#   extension  custom_nodes
+#
+# Example - remove the leading # to enable
+#
+# model
+# https://civitai.com/api/download/models/123456[my-checkpoint.safetensors]
+# vae
+# https://huggingface.co/user/repo/resolve/main/vae-ft-mse.safetensors
+#
+# Everything below is empty on purpose: uncomment and fill in your own list.
