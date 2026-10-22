@@ -25,6 +25,7 @@ from sdai.constants import HOME_PATH, SETTINGS_PATH, VENV_PATH, SCRIPTS_PATH, GD
 from sdai.utils.json import read, save, update, key_exists, load_settings
 from sdai.services.tunnel_hub import Tunnel
 from sdai.webui_meta import WEBUIS, meta, gdrive_path
+from sdai.utils.webui import ensure_webui_settings
 from sdai.translations import tr
 
 
@@ -36,8 +37,8 @@ ipySys = get_ipython().system
 osENV['PYTHONWARNINGS'] = 'ignore'
 
 ENV_NAME   = read(SETTINGS_PATH, 'ENVIRONMENT.env_name')
-UI_NAME    = read(SETTINGS_PATH, 'WEBUI.current')
-WEBUI_PATH = Path(read(SETTINGS_PATH, 'WEBUI.webui_path'))
+UI_NAME    = ensure_webui_settings()
+WEBUI_PATH = Path(read(SETTINGS_PATH, 'WEBUI.webui_path') or HOME_PATH / UI_NAME)
 EXTS_DIR   = Path(read(SETTINGS_PATH, 'WEBUI.extension_dir'))
 
 

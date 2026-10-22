@@ -14,6 +14,7 @@ from sdai.webui_meta import meta, build_urls, build_config_urls, build_extension
 from sdai.constants import HOME_PATH, SETTINGS_PATH
 from sdai.services.manager import download, clone
 from sdai.utils.json import read
+from sdai.utils.webui import ensure_webui_settings
 
 
 ipySys = get_ipython().system
@@ -21,12 +22,12 @@ ipyRun = get_ipython().run_line_magic
 
 
 CLONE_UI = read(SETTINGS_PATH, 'WIDGETS.clone_ui', False)
-UI_NAME  = read(SETTINGS_PATH, 'WEBUI.current')
+UI_NAME  = ensure_webui_settings()
 ENV_NAME = read(SETTINGS_PATH, 'ENVIRONMENT.env_name')
 GITHUB   = read(SETTINGS_PATH, 'ENVIRONMENT.github')
 BRANCH   = read(SETTINGS_PATH, 'ENVIRONMENT.branch')
 
-WEBUI_PATH = Path(read(SETTINGS_PATH, 'WEBUI.webui_path'))
+WEBUI_PATH = Path(read(SETTINGS_PATH, 'WEBUI.webui_path') or HOME_PATH / UI_NAME)
 EXTS_DIR   = Path(read(SETTINGS_PATH, 'WEBUI.extension_dir'))
 EMBED_DIR  = Path(read(SETTINGS_PATH, 'WEBUI.embed_dir'))
 UPSC_DIR   = Path(read(SETTINGS_PATH, 'WEBUI.upscale_dir'))

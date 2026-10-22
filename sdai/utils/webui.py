@@ -7,7 +7,7 @@ from pathlib import Path
 # === SDAIGEN ===
 from sdai.constants import HOME_PATH, SETTINGS_PATH
 from sdai.utils.json import read, save, update
-from sdai.webui_meta import meta, build_paths
+from sdai.webui_meta import DEFAULT_UI, WEBUIS, meta, build_paths
 
 
 # ~~ WEBUI HANDLERS ~~
@@ -29,10 +29,37 @@ def update_current_webui(current_ui: str):
     _update_webui_symlink(current_ui)
 
 
+def ensure_webui_settings() -> str:
+    """Return the active WebUI, rebuilding the WEBUI settings if they are missing
+
+    `WEBUI.webui_path` and the directory map only exist once the widgets panel is
+    saved, so a fresh session - or one where Save was never pressed - leaves them
+    unset and the next script dies on a `None` path.
+    """
+    ui = read(SETTINGS_PATH, 'WEBUI.current') or DEFAULT_UI
+    if ui not in WEBUIS:
+        ui = DEFAULT_UI
+
+    saved   = read(SETTINGS_PATH, 'WEBUI') or {}
+    missing = (
+        saved.get('webui_path') != str(HOME_PATH / ui)
+        or any(key not in saved for key in build_paths(ui))
+    )
+
+    if missing:
+        update_current_webui(ui)
+
+    return ui
+
+
 def _update_webui_symlink(ui: str):
     """Create/Update webui_root symlink in home_work_path"""
     try:
-        home_work = Path(read(SETTINGS_PATH, 'ENVIRONMENT.home_work_path') or '')
+        home_work = read(SETTINGS_PATH, 'ENVIRONMENT.home_work_path')
+        if not home_work:
+            return
+
+        home_work = Path(home_work)
         if not home_work.exists():
             return
 

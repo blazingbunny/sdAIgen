@@ -14,10 +14,11 @@ from sdai.constants import SETTINGS_PATH, CSS_DIR_PATH, GD_BASE
 from sdai.utils.json import read, load_settings
 from sdai.factory import WidgetFactory
 from sdai.webui_meta import gdrive_path as gdrive_mirror
+from sdai.utils.webui import ensure_webui_settings
 from sdai.translations import tr
 
 
-UI_NAME      = read(SETTINGS_PATH, 'WEBUI.current')
+UI_NAME      = ensure_webui_settings()
 ENV_NAME     = read(SETTINGS_PATH, 'ENVIRONMENT.env_name')
 mount_gdrive = read(SETTINGS_PATH, 'GDRIVE.mount', False)
 

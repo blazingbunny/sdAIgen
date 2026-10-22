@@ -581,3 +581,7 @@ def save_data(button: widgets.Button):
 
 load_settings()
 save_button.on_click(save_data)
+
+# Persist the selected WebUI right away: every following script reads webui_path
+# and the directory map from settings.json, so Save must not be mandatory.
+update_current_webui(selected_webui_widget.value)

@@ -12,11 +12,12 @@ from pathlib import Path
 from sdai.constants import SETTINGS_PATH, CSS_DIR_PATH
 from sdai.factory import WidgetFactory
 from sdai.utils.json import read, load_settings
+from sdai.utils.webui import ensure_webui_settings
 
 
 # ~~ CONSTANTS ~~
 
-UI_NAME         = read(SETTINGS_PATH, 'WEBUI.current')
+UI_NAME         = ensure_webui_settings()
 CONTAINER_WIDTH = '1200px'
 HEADER_DL       = 'DOWNLOAD RESULTS'
 VERSION         = 'v1.5'

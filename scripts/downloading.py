@@ -26,7 +26,7 @@ from sdai.webui_meta import DEFAULT_VENV, WEBUIS, meta, build_urls, gdrive_path
 from sdai.utils.json import read, save, key_exists, load_settings
 from sdai.services.manager import _normalize_url, download, clone
 from sdai.models import find_model_by_partial_name, get_category
-from sdai.utils.webui import _remove_path, handle_setup_timer
+from sdai.utils.webui import _remove_path, handle_setup_timer, ensure_webui_settings
 from sdai.api.civitai import CIVITAI_DOMAINS, CivitaiAPI
 from sdai.translations import tr
 
@@ -35,8 +35,8 @@ ipySys = get_ipython().system
 ipyRun = get_ipython().run_line_magic
 
 ENV_NAME   = read(SETTINGS_PATH, 'ENVIRONMENT.env_name')
-UI_NAME    = read(SETTINGS_PATH, 'WEBUI.current')
-WEBUI_PATH = Path(read(SETTINGS_PATH, 'WEBUI.webui_path'))
+UI_NAME    = ensure_webui_settings()
+WEBUI_PATH = Path(read(SETTINGS_PATH, 'WEBUI.webui_path') or HOME_PATH / UI_NAME)
 EXTS_DIR   = Path(read(SETTINGS_PATH, 'WEBUI.extension_dir'))
 
 
