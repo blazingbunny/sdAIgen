@@ -2,8 +2,6 @@
 <img width="1080px" height="auto" src=".github/preview.webp"/></br>
 <h1>~ SDAIGEN | Stable Diffusion / ComfyUI | NoteBook V3 ~</h1>
 
-English • [Русский](README.ru.md)
-
 <details>
 <summary>🖥️ UI Preview</summary>
 
