@@ -218,6 +218,20 @@ def _set_gdrive_state(state: bool):
         gdrive_settings_box.remove_class('gdrive-visible')
 
 
+def _save_gdrive_state(*_args):
+    """Persist the GDrive panel right away, so Save is not required for syncing"""
+    save(SETTINGS_PATH, 'GDRIVE', {
+        'mount':          gdrive_button.toggle,
+        'gdrive_files':   gdrive_files_widget.value,
+        'gdrive_outputs': gdrive_outputs_widget.value,
+        'gdrive_configs': gdrive_configs_widget.value,
+    })
+
+
+for _checkbox in (gdrive_files_widget, gdrive_outputs_widget, gdrive_configs_widget):
+    _checkbox.observe(_save_gdrive_state, names='value')
+
+
 if ENV_NAME != 'Colab':
     gdrive_button.layout.display = 'none'   # Hide button if not Colab
 else:
@@ -226,6 +240,7 @@ else:
     def handle_toggle(button: widgets.Button):
         _set_gdrive_state(not button.toggle)
         button.tooltip = TOOLTIPS[not button.toggle]
+        _save_gdrive_state()
 
     gdrive_button.on_click(handle_toggle)
 
@@ -585,3 +600,7 @@ save_button.on_click(save_data)
 # Persist the selected WebUI right away: every following script reads webui_path
 # and the directory map from settings.json, so Save must not be mandatory.
 update_current_webui(selected_webui_widget.value)
+
+# Same for the GDrive panel - otherwise downloading.py sees mount=false and
+# unmounts a Drive the user just switched on.
+_save_gdrive_state()
