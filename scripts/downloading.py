@@ -1095,15 +1095,60 @@ elif diffusion_link.is_symlink():
 
 # --- Copy dir from GDrive to extension_dir (if enabled) ---
 if gdrive_mount and sync_files:
-    gdrive_path = EXTS_DIR / 'GDrive'
-    if gdrive_path.is_dir():
-        for folder in os.listdir(gdrive_path):
-            src = gdrive_path / folder
+    gd_exts = EXTS_DIR / 'GDrive'    # NOTE: do not name this gdrive_path()
+    if gd_exts.is_dir():
+        for folder in os.listdir(gd_exts):
+            src = gd_exts / folder
             dst = EXTS_DIR / folder
             if src.is_dir():
                 shutil.copytree(src, dst, dirs_exist_ok=True)
-        _remove_path(gdrive_path)
+        _remove_path(gd_exts)
 
+
+# ~~ SNAPSHOT (ComfyUI) ~~
+
+def save_comfy_snapshot() -> Path | None:
+    """Save a ComfyUI-Manager snapshot (nodes + pip pins) into the UI's GDrive folder
+
+    extensions.txt always installs HEAD; a snapshot records the exact custom-node
+    commits that were working, so the list is worth keeping next to the models.
+    """
+    cli = Path(EXTS_DIR) / 'ComfyUI-Manager' / 'cm-cli.py'
+    if not cli.is_file():
+        return None
+
+    dst = gdrive_path(UI_NAME, WEBUI_PATH / 'snapshot.json')
+    dst.parent.mkdir(parents=True, exist_ok=True)
+
+    # cm-cli only writes *.json, so stage next to the target: a crash must not
+    # leave yesterday's snapshot looking like a fresh one
+    tmp = dst.with_name(dst.stem + '.tmp.json')
+    if tmp.exists():
+        tmp.unlink()
+
+    env = {**os.environ, 'COMFYUI_PATH': str(WEBUI_PATH)}
+
+    try:
+        result = subprocess.run(
+            [str(Path(VENV_PATH) / 'bin/python'), str(cli), 'save-snapshot', '--output', str(tmp)],
+            cwd=str(WEBUI_PATH), env=env, capture_output=True, timeout=300,
+        )
+    except Exception as exc:
+        print(f"⚠️  Snapshot skipped: {exc}")
+        return None
+
+    if not tmp.is_file():
+        print(f"⚠️  Snapshot skipped: cm-cli exited {result.returncode}")
+        return None
+
+    tmp.replace(dst)
+    return dst
+
+
+# --- Snapshot the ComfyUI install into Drive (pinned nodes for next time) ---
+if UI_NAME == 'ComfyUI' and gdrive_mount and (GD_MOUNT / 'MyDrive').exists():
+    if snapshot := save_comfy_snapshot():
+        print(f"💾 Snapshot saved: {snapshot}")
 
 # --- List Models and stuff ---
 ipyRun('run', str(SCRIPTS_PATH / 'download_result.py'))
